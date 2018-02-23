@@ -1,0 +1,12 @@
+colosseum==0.1.6
+cycler==0.10.0
+matplotlib==2.1.2
+numpy==1.14.0
+opencv-python==3.4.0.12
+Pillow==5.0.0
+PyOpenGL==3.1.0
+pyparsing==2.2.0
+python-dateutil==2.6.1
+pytz==2017.3
+sip==4.19.7
+six==1.11.0
