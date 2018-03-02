@@ -1,14 +1,13 @@
-from tkinter import *
-from tkinter import ttk
+import logging
 import os
+import threading
+from tkinter import *
+
 import cv2
 import numpy as np
 from PIL import Image, ImageTk
-import threading
-from imageprocessing.contouring import cnt_from_img, img_with_contour, save_contour, save_image
 
-
-import logging
+from imageprocessing.contouring import cnt_from_img, save_contour, save_image
 
 logger = logging.getLogger(__name__)
 
@@ -28,12 +27,15 @@ class ResizingImageCanvas(Canvas):
         self.bind("<Button-2>", self.toggle)
         #self.bind('<B1-Motion>', self.motion)
 
-        self.points = []
+        self.user_points = []
         self.parent = parent
         self.spline = 0
         self.new_point = False
-        self.line_tag = "line"
-        self.point_tag = "point"
+        self.user_line_tag = "usr_line"
+        self.user_point_tag = "usr_point"
+
+        self.contour_line_tag = "cnt_line"
+        self.contour_point_tag = "cnt_point"
         self.configure(cursor="crosshair red")
 
         self.image_path = ""
@@ -46,6 +48,7 @@ class ResizingImageCanvas(Canvas):
 
         self.contours = None
         self.curr_contour = 0
+        self.cnt_points = []
         self.contour_image = None
         self.contour_photo = None
 
@@ -158,16 +161,32 @@ class ResizingImageCanvas(Canvas):
         self.configure(cursor="crosshair red")
 
     def draw_contour(self, cnt_idx):
-
         if self.ready:
-            cnt_image = img_with_contour(np.asarray(self.image), self.contours[cnt_idx])
-            #print(np.shape(cnt_image))
-            cv2_im = cv2.cvtColor(cnt_image, cv2.COLOR_BGR2RGB)
-            p_image = Image.fromarray(cv2_im)
-            #self.image.paste(p_image, (0, 0), p_image)
-            #self.set_image(p_image)
-            self.photo = ImageTk.PhotoImage(p_image)
-            self.create_image(0, 0, anchor=NW, image=self.photo)
+            self.delete(self.contour_point_tag)
+            self.delete(self.contour_line_tag)
+            self.cnt_points.clear()
+
+            for point in self.contours[cnt_idx]:
+                point_x = point[0][0]
+                point_y = point[0][1]
+                self.cnt_points.append(point_x)
+                self.cnt_points.append(point_y)
+                # kwargs = {'outline': "spring green", 'fill': "spring green",  'tag': self.contour_point_tag}
+                # self.create_oval(point_x, point_y, point_x + 1, point_y + 1, kwargs)
+
+            kwargs = {'tags': self.contour_line_tag, 'width': 2, 'fill': "red",
+                      'joinstyle': "round", 'capstyle': "round"}
+            self.itemconfigure(self.contour_line_tag, smooth=1)
+            self.create_line(self.cnt_points, kwargs)
+
+            # cnt_image = img_with_contour(np.asarray(self.image), self.contours[cnt_idx])
+            # #print(np.shape(cnt_image))
+            # cv2_im = cv2.cvtColor(cnt_image, cv2.COLOR_BGR2RGB)
+            # p_image = Image.fromarray(cv2_im)
+            # #self.image.paste(p_image, (0, 0), p_image)
+            # #self.set_image(p_image)
+            # self.photo = ImageTk.PhotoImage(p_image)
+            # self.create_image(0, 0, anchor=NW, image=self.photo)
         else:
             self.contours_not_ready()
 
@@ -206,48 +225,55 @@ class ResizingImageCanvas(Canvas):
     def point(self, event):
         self.focus_set()
         self.new_point = True
-        self.create_oval(event.x, event.y, event.x + 1, event.y + 1, outline="red", fill="red", tag=self.point_tag)
-        self.points.append(event.x)
-        self.points.append(event.y)
+        self.create_oval(event.x, event.y, event.x + 1, event.y + 1, outline="red", fill="red", tag=self.user_point_tag)
+        self.user_points.append(event.x)
+        self.user_points.append(event.y)
 
     def canxy(self, event):
         print(event.x, event.y)
 
     def graph(self, event):
-        if self.new_point and len(self.points) > 2:
-            self.delete(self.line_tag)
+        if self.new_point and len(self.user_points) > 2:
+            self.delete(self.user_line_tag)
             self.spline = 0
-            self.create_line(self.points, tags=self.line_tag, width=2, fill="red", joinstyle="round", capstyle="round")
+            self.create_line(self.user_points, tags=self.user_line_tag, width=2, fill="red", joinstyle="round",
+                             capstyle="round")
 
         self.new_point = False
 
     def toggle(self, event):
         if self.spline == 0:
-            self.itemconfigure(self.line_tag, smooth=1)
+            self.itemconfigure(self.user_line_tag, smooth=1)
             self.spline = 1
         elif self.spline == 1:
-            self.itemconfigure(self.line_tag, smooth=0)
+            self.itemconfigure(self.user_line_tag, smooth=0)
             self.spline = 0
 
     def clear_points(self):
-        self.points.clear()
-        self.delete(self.point_tag)
-        self.delete(self.line_tag)
+        self.user_points.clear()
+        self.delete(self.user_point_tag)
+        self.delete(self.user_line_tag)
 
     def motion(self, event):
-        self.points.append(event.x)
-        self.points.append(event.y)
-        logger.debug("Motion at: (%s %s)" % (event.x, event.y))
+        self.user_points.append(event.x)
+        self.user_points.append(event.y)
 
     def recontour(self):
-        x_list = self.points[0::2]
-        y_list = self.points[1::2]
-        for point in zip(x_list, y_list):
-            logger.debug("Painting {} in image".format(point))
-            logger.debug("Current contour: {}".format(self.contours[self.curr_contour]))
-            im = np.array(self.image.convert('RGB'))
-            logger.debug("Image has shape {} vs our shape ({}, {})".format(np.shape(im), self.width, self.height))
-            #im[point[0], point[1]] = [255, 255, 255]
-            #self.image = Image.fromarray(im)
-            #self.update_contours()
+        x_list = self.user_points[0::2]
+        y_list = self.user_points[1::2]
+        point_list = list(zip(x_list, y_list))
+        point_list_len = len(point_list)
+        for i in range(point_list_len):
+            j = i + 1
+            logger.debug("i: {}, j: {}, point_list_len: {}".format(i, j, point_list_len))
+            if j <= point_list_len - 1:
+                logger.debug("Drawing points {} and {}".format(point_list[i], point_list[j]))
+                im = np.array(self.image.convert('RGB'))
+                im = cv2.line(im, point_list[i], point_list[j], thickness=2, color=(255, 255, 255),
+                              lineType=cv2.LINE_AA)
+                self.image = Image.fromarray(im)
+                # plt.figure(figsize=(20, 20))
+                # plt.imshow(im)
+                # plt.show()
 
+                self.update_contours()

@@ -1,9 +1,7 @@
-from multiprocessing.pool import ThreadPool
+import os
 
 import cv2
 import numpy as np
-import os
-from PIL import Image
 
 
 def cnt_from_img(im, write_files=False):
@@ -22,8 +20,9 @@ def cnt_from_img(im, write_files=False):
     blur = cv2.bilateralFilter(imgray, 9, 75, 75)
     #blur = cv2.GaussianBlur(denoise, (5, 5), 0)
     # Thresholding
-    thresh = cv2.adaptiveThreshold(blur, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 23, 2)
-    #ret, thresh = cv2.threshold(blur, 127, 255, cv2.THRESH_BINARY)
+    # thresh = cv2.adaptiveThreshold(blur, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 93, 2)
+    ret, thresh = cv2.threshold(blur, 40
+                                , 255, cv2.THRESH_BINARY)
     # Detect edges
     #edges = cv2.Canny(thresh, 100, 100)
     # Get contours
