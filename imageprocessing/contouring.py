@@ -2,6 +2,7 @@ from multiprocessing.pool import ThreadPool
 
 import cv2
 import numpy as np
+import os
 from PIL import Image
 
 
@@ -21,7 +22,7 @@ def cnt_from_img(im, write_files=False):
     blur = cv2.bilateralFilter(imgray, 9, 75, 75)
     #blur = cv2.GaussianBlur(denoise, (5, 5), 0)
     # Thresholding
-    thresh = cv2.adaptiveThreshold(blur, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 19, 2)
+    thresh = cv2.adaptiveThreshold(blur, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 23, 2)
     #ret, thresh = cv2.threshold(blur, 127, 255, cv2.THRESH_BINARY)
     # Detect edges
     #edges = cv2.Canny(thresh, 100, 100)
@@ -34,7 +35,7 @@ def cnt_from_img(im, write_files=False):
 
 
 def img_with_contour(img, cnt):
-    cv2.drawContours(img, [cnt], 0, (0, 255, 0), 3)
+    cv2.drawContours(img, [cnt], 0, (0, 255, 0), 1)
     #res = empty[:]
     #copy_condition = empty[:, :, 3] > 0
     #res[copy_condition] = empty[copy_condition]
@@ -42,11 +43,17 @@ def img_with_contour(img, cnt):
 
 
 def save_contour(cnt, width, height, path):
-    x, y, w, h = cv2.boundingRect(cnt)
+    #x, y, w, h = cv2.boundingRect(cnt)
     empty = np.zeros((height, width, 3))
     cv2.drawContours(empty, [cnt], 0, (0, 255, 0), 1)
-    crop_img = empty[y:y + h, x:x + w]
+    #crop_img = empty[y:y + h, x:x + w]
 
-    cv2.imwrite(path + ".png", crop_img)
+    cv2.imwrite(path + ".bmp", empty)
+
+
+def save_image(img, path):
+
+    if not os.path.exists(path):
+        cv2.imwrite(path + ".bmp", np.array(img))
 
 

@@ -5,7 +5,12 @@ import cv2
 import numpy as np
 from PIL import Image, ImageTk
 import threading
-from imageprocessing.contouring import cnt_from_img, img_with_contour, save_contour
+from imageprocessing.contouring import cnt_from_img, img_with_contour, save_contour, save_image
+
+
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 # a subclass of Canvas for dealing with resizing of windows
@@ -13,11 +18,23 @@ class ResizingImageCanvas(Canvas):
     def __init__(self, parent, image=None, **kwargs):
         Canvas.__init__(self, parent, **kwargs)
         self.bind("<Key>", self.keydispatch)
-        self.bind("<Button-1>", self.callback)
         self.bind("<Configure>", self.on_resize)
 
         self.height = self.winfo_reqheight()
         self.width = self.winfo_reqwidth()
+
+        self.bind("<Button-1>", self.point)
+        self.bind("<Button-3>", self.graph)
+        self.bind("<Button-2>", self.toggle)
+        #self.bind('<B1-Motion>', self.motion)
+
+        self.points = []
+        self.parent = parent
+        self.spline = 0
+        self.new_point = False
+        self.line_tag = "line"
+        self.point_tag = "point"
+        self.configure(cursor="crosshair red")
 
         self.image_path = ""
         self.image_folder = ""
@@ -37,24 +54,25 @@ class ResizingImageCanvas(Canvas):
         self.set_image(image)
 
     def open_image(self, path):
+        self.focus()
         self.image_path = path
         new_image = Image.open(self.image_path)
         self.set_image(new_image)
 
     def draw_next_contour(self):
-        if self.curr_contour != len(self.contours) - 1:
+        logger.debug("Current contour: {}".format(self.curr_contour))
+        if self.curr_contour < len(self.contours) - 1:
             self.curr_contour += 1
-            self.curr_contour = 0
             self.draw_contour(self.curr_contour)
 
     def draw_last_contour(self):
-        if self.curr_contour != 0:
+        logger.debug("Current contour: {}".format(self.curr_contour))
+        if self.curr_contour > 0:
             self.curr_contour -= 1
-            self.curr_contour = 0
             self.draw_contour(self.curr_contour)
 
     def keydispatch(self, event):
-        print("pressed", event.keysym)
+        logger.debug("User pressed: \'{}\'".format(event.keysym))
         if event.keysym == 'Right':
             self.draw_next_contour()
         if event.keysym == 'Left':
@@ -65,14 +83,20 @@ class ResizingImageCanvas(Canvas):
             self.last_image()
         if event.keysym == 'd':
             self.next_image()
+        if event.keysym == 'x':
+            self.clear_points()
+        if event.keysym == 'c':
+            self.recontour()
 
     def next_image(self):
+        self.curr_contour = -1
         self.image_idx += 1
         self.image_idx %= len(self.image_names)
         path = os.path.join(self.image_folder, self.image_names[self.image_idx])
         self.open_image(path)
 
     def last_image(self):
+        self.curr_contour = -1
         self.image_idx -= 1
         self.image_idx %= len(self.image_names)
         path = os.path.join(self.image_folder, self.image_names[self.image_idx])
@@ -80,7 +104,7 @@ class ResizingImageCanvas(Canvas):
 
     def callback(self, event):
         self.focus_set()
-        print("clicked at ({}, {})".format(event.x, event.y))
+        logger.debug("click at ({}, {})".format(event.x, event.y))
 
     def on_resize(self, event):
         # determine the ratio of old width/height to new width/height
@@ -125,12 +149,16 @@ class ResizingImageCanvas(Canvas):
 
     def update_contours(self):
         self.ready = False
+        self.configure(cursor="clock")
         self.contours = []
         self.curr_contour = 0
         self.contours = cnt_from_img(self.image)
+        logger.debug("Got {} contours".format(len(self.contours)))
         self.ready = True
+        self.configure(cursor="crosshair red")
 
     def draw_contour(self, cnt_idx):
+
         if self.ready:
             cnt_image = img_with_contour(np.asarray(self.image), self.contours[cnt_idx])
             #print(np.shape(cnt_image))
@@ -144,6 +172,7 @@ class ResizingImageCanvas(Canvas):
             self.contours_not_ready()
 
     def export_contour(self, cnt_idx):
+        # Save the contour to an image by itself
         path_segs = self.image_path.split("/")
         file_name = path_segs[-1]
 
@@ -163,8 +192,62 @@ class ResizingImageCanvas(Canvas):
         thread = threading.Thread(target=save_contour, args=(self.contours[cnt_idx], self.width, self.height, im_save_path))
         thread.start()
 
+        # Save a background image for more processing
+        bkg_save_path = new_path + file_name_split[0] + "-bkg"
+        thread = threading.Thread(target=save_image, args=(self.image, bkg_save_path))
+        thread.start()
+
     @staticmethod
     def contours_not_ready():
         filewin = Toplevel()
         label = Label(filewin, text="Contours not ready")
         label.pack()
+
+    def point(self, event):
+        self.focus_set()
+        self.new_point = True
+        self.create_oval(event.x, event.y, event.x + 1, event.y + 1, outline="red", fill="red", tag=self.point_tag)
+        self.points.append(event.x)
+        self.points.append(event.y)
+
+    def canxy(self, event):
+        print(event.x, event.y)
+
+    def graph(self, event):
+        if self.new_point and len(self.points) > 2:
+            self.delete(self.line_tag)
+            self.spline = 0
+            self.create_line(self.points, tags=self.line_tag, width=2, fill="red", joinstyle="round", capstyle="round")
+
+        self.new_point = False
+
+    def toggle(self, event):
+        if self.spline == 0:
+            self.itemconfigure(self.line_tag, smooth=1)
+            self.spline = 1
+        elif self.spline == 1:
+            self.itemconfigure(self.line_tag, smooth=0)
+            self.spline = 0
+
+    def clear_points(self):
+        self.points.clear()
+        self.delete(self.point_tag)
+        self.delete(self.line_tag)
+
+    def motion(self, event):
+        self.points.append(event.x)
+        self.points.append(event.y)
+        logger.debug("Motion at: (%s %s)" % (event.x, event.y))
+
+    def recontour(self):
+        x_list = self.points[0::2]
+        y_list = self.points[1::2]
+        for point in zip(x_list, y_list):
+            logger.debug("Painting {} in image".format(point))
+            logger.debug("Current contour: {}".format(self.contours[self.curr_contour]))
+            im = np.array(self.image.convert('RGB'))
+            logger.debug("Image has shape {} vs our shape ({}, {})".format(np.shape(im), self.width, self.height))
+            #im[point[0], point[1]] = [255, 255, 255]
+            #self.image = Image.fromarray(im)
+            #self.update_contours()
+
