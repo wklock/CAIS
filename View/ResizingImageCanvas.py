@@ -2,7 +2,8 @@ import logging
 import os
 import threading
 from tkinter import *
-
+import hashlib
+import time
 import cv2
 import numpy as np
 from PIL import Image, ImageTk
@@ -43,7 +44,7 @@ class ResizingImageCanvas(Canvas):
         self.image_names = []
         self.image_idx = 0
         self.image = None
-
+        self.thresh_val = 40
         self.ready = False
 
         self.contours = None
@@ -79,19 +80,31 @@ class ResizingImageCanvas(Canvas):
         if event.keysym == 'Right':
             self.draw_next_contour()
         if event.keysym == 'Left':
-            self.draw_last_contour()
+            self.draw_last_contouddddddr()
         if event.keysym == 'Down':
             self.export_contour(self.curr_contour)
         if event.keysym == 'a':
+            logger.info("Current image: {}".format(self.image_idx))
             self.last_image()
         if event.keysym == 'd':
+            logger.info("Current image: {}".format(self.image_idx))
             self.next_image()
         if event.keysym == 'x':
             self.clear_points()
         if event.keysym == 'c':
             self.recontour()
+        if event.keysym == 'equal' or event.keysym == 'plus':
+            self.update_thresh(1)
+        if event.keysym == 'minus':
+            self.update_thresh(-1)
+
+    def update_thresh(self, delta_thresh):
+        self.thresh_val += delta_thresh
+        self.update_contours()
+        pass
 
     def next_image(self):
+        self.clear_points()
         self.curr_contour = -1
         self.image_idx += 1
         self.image_idx %= len(self.image_names)
@@ -99,6 +112,7 @@ class ResizingImageCanvas(Canvas):
         self.open_image(path)
 
     def last_image(self):
+        self.clear_points()
         self.curr_contour = -1
         self.image_idx -= 1
         self.image_idx %= len(self.image_names)
@@ -155,7 +169,7 @@ class ResizingImageCanvas(Canvas):
         self.configure(cursor="clock")
         self.contours = []
         self.curr_contour = 0
-        self.contours = cnt_from_img(self.image)
+        self.contours = cnt_from_img(self.image, self.thresh_val)
         logger.debug("Got {} contours".format(len(self.contours)))
         self.ready = True
         self.configure(cursor="crosshair red")
@@ -173,7 +187,6 @@ class ResizingImageCanvas(Canvas):
                 self.cnt_points.append(point_y)
                 # kwargs = {'outline': "spring green", 'fill': "spring green",  'tag': self.contour_point_tag}
                 # self.create_oval(point_x, point_y, point_x + 1, point_y + 1, kwargs)
-
             kwargs = {'tags': self.contour_line_tag, 'width': 2, 'fill': "red",
                       'joinstyle': "round", 'capstyle': "round"}
             self.itemconfigure(self.contour_line_tag, smooth=1)
@@ -198,7 +211,13 @@ class ResizingImageCanvas(Canvas):
         file_name_split = file_name.split(".")
         file_ext = file_name_split[-1]
         file_name_wo_ext = file_name_split[0]
-        file_name_wo_ext += "-{}".format(self.curr_contour)
+        # Used to just add contour index but that doesn't work because recontouring could lead to saving a different contour at the same index
+        # so now we hash the current time instead
+        #file_name_wo_ext += "-{}".format(self.curr_contour)
+
+        time_hash = hashlib.sha1()
+        time_hash.update(str(time.time()).encode('utf-8'))
+        file_name_wo_ext += "-{}".format(time_hash.hexdigest()[:10])
 
         new_path = "/".join(path_segs[:-1])
         new_path += "/saved_contours/"
@@ -226,8 +245,15 @@ class ResizingImageCanvas(Canvas):
         self.focus_set()
         self.new_point = True
         self.create_oval(event.x, event.y, event.x + 1, event.y + 1, outline="red", fill="red", tag=self.user_point_tag)
+        point = (event.x, event.y)
+        logger.debug("Closest point to {} is {}".format(point, self.closet_point(point, self.cnt_points)))
         self.user_points.append(event.x)
         self.user_points.append(event.y)
+
+    def closet_point(self, point, points):
+        points = np.asarray(self.get_point_list(points))
+        dist = np.sum((points - point) ** 2, axis=1)
+        return points   [np.argmin(dist)]
 
     def canxy(self, event):
         print(event.x, event.y)
@@ -259,9 +285,7 @@ class ResizingImageCanvas(Canvas):
         self.user_points.append(event.y)
 
     def recontour(self):
-        x_list = self.user_points[0::2]
-        y_list = self.user_points[1::2]
-        point_list = list(zip(x_list, y_list))
+        point_list = self.get_point_list(self.user_points)
         point_list_len = len(point_list)
         for i in range(point_list_len):
             j = i + 1
@@ -277,3 +301,9 @@ class ResizingImageCanvas(Canvas):
                 # plt.show()
 
                 self.update_contours()
+
+    def get_point_list(self, point_list):
+        x_list = point_list[0::2]
+        y_list = point_list[1::2]
+        point_list = list(zip(x_list, y_list))
+        return point_list

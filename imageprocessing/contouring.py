@@ -4,7 +4,7 @@ import cv2
 import numpy as np
 
 
-def cnt_from_img(im, write_files=False):
+def cnt_from_img(im, thresh_val=40, write_files=False):
     # Load the image
     #im = cv2.imread(img)
     npim = np.array(im.convert('RGB'))
@@ -15,16 +15,15 @@ def cnt_from_img(im, write_files=False):
     # Convert to greyscale
     imgray = cv2.cvtColor(npim, cv2.COLOR_BGR2GRAY)
     # Denoise
-    #denoise = cv2.fastNlMeansDenoising(imgray, templateWindowSize=7, searchWindowSize=21, h=12)
+    # denoise = cv2.fastNlMeansDenoising(imgray, templateWindowSize=7, searchWindowSize=21, h=12)
     # Blur
     blur = cv2.bilateralFilter(imgray, 9, 75, 75)
-    #blur = cv2.GaussianBlur(denoise, (5, 5), 0)
+    # blur = cv2.GaussianBlur(denoise, (5, 5), 0)
     # Thresholding
     # thresh = cv2.adaptiveThreshold(blur, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 93, 2)
-    ret, thresh = cv2.threshold(blur, 40
-                                , 255, cv2.THRESH_BINARY)
+    ret, thresh = cv2.threshold(blur, thresh_val, 255, cv2.THRESH_BINARY)
     # Detect edges
-    #edges = cv2.Canny(thresh, 100, 100)
+    # edges = cv2.Canny(thresh, 100, 100)
     # Get contours
     im2, contours, hierarchy = cv2.findContours(thresh, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
     # Sort contours by area
