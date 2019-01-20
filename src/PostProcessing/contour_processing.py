@@ -5,7 +5,6 @@ import os
 import numpy as np
 import re
 import matplotlib.pyplot as plt
-from mpl_toolkits.mplot3d import axes3d
 
 
 def text_files_from_folder(folder_path):
