@@ -1,6 +1,7 @@
 # Retrived from: https://blender.stackexchange.com/a/31825
 # I don't claim any responsibility for this code, it is included here for completeness.
-
+# This script is a plugin for Blender to allow a user to import multiple objects at once.
+# This is useful for loading a bunch of contours at the same time.
 # ##### BEGIN GPL LICENSE BLOCK #####
 #
 #  This program is free software; you can redistribute it and/or
