@@ -425,7 +425,8 @@ class ResizingImageCanvas(Canvas):
         self.delete(self.user_point_tag)
         self.delete(self.user_line_tag)
 
-    def get_point_list(self, point_list):
+    @staticmethod
+    def get_point_list(point_list):
         """
         Zips the lists of x and y coordinates.
         :param point_list: The list of points that the user input
